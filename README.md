@@ -1,5 +1,7 @@
 # Fugitap display manager
 
+[![Build Status](https://travis-ci.org/tunebird/fugitap.svg?branch=master)](https://travis-ci.org/tunebird/fugitap)
+
 A tap display designed for the Fûgıdaıre kegerator. Runs on an esp8266 with the
 arduino framework connected to a cheap 2.4in colour TFT display.
 

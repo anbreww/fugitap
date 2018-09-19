@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ESP.h>
 
 // Display driver
 #include <SPI.h>
@@ -17,6 +18,7 @@
 #include "settings.h"
 #include "SPIFFS_Support.h"
 #include "GfxUi.h"
+#include "Beer.h"
 
 #define SERIAL_DEBUG
 
@@ -63,6 +65,8 @@ void setup() {
 
 
     listFiles();
+    // Serial.println("Formatting SPIFFS, please wait.");
+    // SPIFFS.format();
 
 }
 
@@ -86,8 +90,6 @@ void loop()
     }
 }
 
-const char * beer_name[2] = {"Legen-dairy", ""};
-const char * beer_type = "Milk Stout";
 
 #define NUM_LINES   4
 #define MARGIN  10
@@ -98,16 +100,20 @@ const uint8_t sp_bot = 7; // space between line and text below
 #define LBL_FONT    2
 #define STAT_FONT   4
 
+#define FLOW_IN_PIN PIN_D4  // GPIO2
+
 void drawBeerScreen(void) {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
-
+    // draw divider lines first
     for (uint8_t i = 0; i < NUM_LINES; i++) {
         tft.drawLine(MARGIN, line_pos[i],  TFT_WIDTH-MARGIN, line_pos[i], TFT_WHITE);
     }
-    // draw divider lines first
 
+    Beer beer;
+
+    
     // labels are positioned above the lines
     tft.setTextDatum(BL_DATUM);
     tft.setFreeFont(FONT_LABELS);
@@ -120,14 +126,14 @@ void drawBeerScreen(void) {
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BEER);
     tft.setTextWrap(true);
-    tft.drawString(beer_name[0], MARGIN, line_pos[0] + sp_bot);
-    tft.drawString(beer_name[1], MARGIN, line_pos[0] + sp_bot + 20);
+    tft.drawString(beer.name(), MARGIN, line_pos[0] + sp_bot);
+    //tft.drawString(beer_name[1], MARGIN, line_pos[0] + sp_bot + 20);
     tft.setFreeFont(FONT_STATS);
-    tft.drawString(beer_type, MARGIN, line_pos[1] + sp_bot);
+    tft.drawString(beer.type(), MARGIN, line_pos[1] + sp_bot);
     tft.setTextWrap(false);
-    tft.drawString("ABV: 10%", MARGIN, line_pos[2] + sp_bot);
-    tft.drawString("IBU: 60", MARGIN, line_pos[2] + sp_bot + 20);
-    tft.drawString("OG : 1.102", MARGIN, line_pos[2] + sp_bot + 40);
+    tft.drawString("ABV: " + beer.abv(), MARGIN, line_pos[2] + sp_bot);
+    tft.drawString("IBU: " + beer.ibu(), MARGIN, line_pos[2] + sp_bot + 20);
+    tft.drawString("OG : " + beer.og(), MARGIN, line_pos[2] + sp_bot + 40);
 
     // Placeholder for glass which will be BMP / JPEG / PNG
     const uint8_t glass_w = 70;
@@ -137,6 +143,7 @@ void drawBeerScreen(void) {
     tft.drawString("glass.png", 240 - MARGIN - 70/2, line_pos[2] + sp_bot + 60/2, LBL_FONT);
 
     //writeStatusBar("Last pour : 230ml", TFT_YELLOW);
+    writeStatusBar((String(ESP.getChipId()) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
 }
 
 void drawFillMeter(bool update_fill) {
@@ -209,6 +216,8 @@ void initScreen(void) {
     Serial.println("Ready");
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
+
+    //pinMode(FLOW_IN_PIN, INPUT);
 
     writeStatusBar("Connected Successfully", TFT_WHITE);
     delay(1500);

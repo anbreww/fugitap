@@ -28,10 +28,13 @@
 #define TFT_WIDTH   240
 #define TFT_HEIGHT  320
 
+#define PIN_BACKLIGHT   PIN_D6
+
 #define FONT_STATUS &FreeMono9pt7b
 #define FONT_LABELS &FreeMonoBold9pt7b
 #define FONT_BEER   &FreeMonoBold12pt7b
 #define FONT_STATS  &FreeMono12pt7b
+
 
 // TFT Library : check User_Setup.h in the library for your hardware settings!
 TFT_eSPI tft = TFT_eSPI();
@@ -47,10 +50,10 @@ void setup() {
     Serial.begin(UART_BAUD);
 #endif
 
-
     initScreen();
 
     ArduinoOTA.onStart([]() {
+        digitalWrite(PIN_BACKLIGHT, HIGH);
         Serial.println("OTA Starting");
         writeStatusBar("OTA UPDATE STARTING", TFT_ORANGE);
     });
@@ -63,11 +66,9 @@ void setup() {
     SPIFFS.begin();
 
 
-
     listFiles();
     // Serial.println("Formatting SPIFFS, please wait.");
     // SPIFFS.format();
-
 }
 
 void loop()
@@ -126,6 +127,9 @@ void drawBeerScreen(void) {
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BEER);
     tft.setTextWrap(true);
+    //String beername = "Shoop da whoop";
+    //String beername = Firebase.getString("fugidaire/v2/beers/beer1/name");
+    //tft.drawString(beername, MARGIN, line_pos[0] + sp_bot);
     tft.drawString(beer.name(), MARGIN, line_pos[0] + sp_bot);
     //tft.drawString(beer_name[1], MARGIN, line_pos[0] + sp_bot + 20);
     tft.setFreeFont(FONT_STATS);
@@ -166,6 +170,7 @@ void drawFillMeter(bool update_fill) {
     tft.setTextColor(TFT_WHITE);
     tft.drawString(String(litres) + "L", TFT_WIDTH-MARGIN, line_pos[3] + sp_bot);
 
+    analogWrite(PIN_BACKLIGHT, PWMRANGE*fill_percent/100);
 
     if (!update_fill) {
         return;
@@ -186,6 +191,9 @@ void initScreen(void) {
     tft.setRotation(0);
 
     tft.setFreeFont(FONT_STATUS);
+
+    pinMode(PIN_BACKLIGHT, OUTPUT);
+    analogWrite(PIN_BACKLIGHT, PWMRANGE/4);
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);

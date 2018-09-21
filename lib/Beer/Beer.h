@@ -7,4 +7,5 @@ class Beer {
                 abv(void),
                 ibu(void),
                 og(void);
+        uint8_t tap(void);
 };

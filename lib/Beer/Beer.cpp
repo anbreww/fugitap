@@ -1,27 +1,17 @@
 #include "Beer.h"
+#include <ESP8266WiFi.h>
 
 uint8_t Beer::tap(void) {
-    switch(ESP.getChipId()) {
-        case 1185308:
-            return 0;
-        case 1184547:
-            return 1;
-        case 15951906:
-            return 2;
-        case 15951948:
-            return 3;
-        default:
-            return 4;
-
-    }
+    uint8_t index = (WiFi.localIP()[3] % 10) - 1;
+    return min(index, (uint8_t) 6);
 }
 
 String Beer::name(void) {
     String beers[] = {
         "Armadillo P.A",
-        "Dunkelweizen",
         "Milkshake IPA",
         "Smollusque IPA",
+        "Legen-dairy",
         "She May Rouge",
         "Smoked Porter",
         "Not defined"
@@ -34,9 +24,9 @@ String Beer::type(void)
 {
     String types[] = {
         "Am. Pale Ale", 
-        "Dark Weizen",
         "New England IPA",
         "American IPA",
+        "Milk Stout",
         "Belgian Abbey",
         "Porter",
         "Derp"
@@ -48,12 +38,12 @@ String Beer::type(void)
 String Beer::abv(void)
 {
     String abvs[] = {
-        "5.5%",
+        "4.5%",
+        "5.3%",
+        "7.2%",
+        "4.5%",
+        "8.3%",
         "5.0%",
-        "6.5%",
-        "7.0%",
-        "8.5%",
-        "4.7%",
         "N/A%",
     };
     
@@ -63,12 +53,12 @@ String Beer::abv(void)
 String Beer::ibu(void)
 {
     String ibus[] = {
-        "10",
         "20",
-        "30",
-        "40",
-        "50",
-        "60",
+        "10",
+        "99",
+        "25",
+        "20",
+        "20",
         "NA",
     };
 
@@ -77,9 +67,15 @@ String Beer::ibu(void)
 
 String Beer::og(void)
 {
-    if (ESP.getChipId() == 1185308) {
-        return String("1.070");
-    } else {
-        return String("1.055");
-    }
+    String ogs[] = {
+        "1.045",
+        "1.054",
+        "1.064",
+        "1.066",
+        "1.070",
+        "1.051",
+        "NA",
+    };
+
+    return ogs[this->tap()];
 }

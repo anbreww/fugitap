@@ -12,6 +12,11 @@
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
 
+// MQTT
+#include <PubSubClient.h>
+#define MQTT_VERSION MQTT_VERSION_3_1_1
+void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length);
+
 // TODO later : setup WiFi manager
 // #include <WiFiManager.h>
 
@@ -39,6 +44,10 @@
 #define FONT_BEER   &FreeMonoBold12pt7b
 #define FONT_STATS  &FreeMono12pt7b
 
+// MQTT
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
 
 // TFT Library : check User_Setup.h in the library for your hardware settings!
 TFT_eSPI tft = TFT_eSPI();
@@ -60,6 +69,8 @@ const double kf = 93.3333f;     // Hz per l/min
 FlowSensorProperties MySensor = {cap, kf, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}};
 
 FlowMeter Meter = FlowMeter(PIN_FLOW_IN, MySensor);
+
+Beer beer;
 
 void setup() {
 #ifdef SERIAL_DEBUG
@@ -93,16 +104,63 @@ void setup() {
     attachInterrupt(PIN_FLOW_IN, MeterISR, RISING);
     Meter.reset();
 
+    // Connect to MQTT server
+    Serial.println("Connecting to MQTT server");
+    client.setServer(mqtt_server_host, mqtt_server_port);
+    client.setCallback(mqtt_callback);
+
     delay(1500);
+
+    beer.init();
 
     Serial.println("setup() finished.");
 }
+
+void reconnect()
+{
+    millis();
+    // Loop until we're reconnected
+    while (!client.connected())
+    {
+        Serial.print("INFO: Attempting MQTT connection...");
+        Serial.println(client.state());
+        // Attempt to connect
+        long time = millis();
+        String clientID = mqtt_client_id + time;
+        if (client.connect(clientID.c_str(), mqtt_server_user, mqtt_server_pass))
+        {
+            Serial.println("INFO: connected");
+            Serial.print("Connected : ");
+            Serial.println(client.connected());
+            Serial.print("State rc=");
+            Serial.println(client.state());
+            // ... and resubscribe
+            //client.subscribe(MQTT_TOPIC_LEDS);
+            client.subscribe(MQTT_TOPIC_TAPS);
+
+            String conn_str = "FugiTAPs ESP-" + String(ESP.getChipId(), HEX)
+               + " is online at " + WiFi.localIP().toString();
+            client.publish("fugi/leds/status", conn_str.c_str(), true);
+            break;
+        }
+        else
+        {
+            Serial.print("ERROR: failed, rc=");
+            Serial.print(client.state());
+            Serial.println("DEBUG: try again in 5 seconds");
+            // Wait 5 seconds before retrying
+            delay(5000);
+        }
+    }
+}
+
 
 void loop()
 {
     static int32_t lastScreenUpdate = -1;
     static int32_t lastFillUpdate = -1;
     ArduinoOTA.handle();
+    client.loop();
     //pinMode(PIN_FLOW_IN, INPUT);
 
     // if (Meter.getCurrentFlowrate() > 0.01) {
@@ -125,6 +183,13 @@ void loop()
         drawFillMeter(true);
         lastFillUpdate = millis();
         drawFlowRate();
+    }
+
+    if (!client.connected())
+    {
+        Serial.print("Client not connected. Going to Reconnect. rc=");
+        Serial.println(client.state());
+        reconnect();
     }
 }
 
@@ -190,8 +255,6 @@ void drawFlowScreen(void) {
     tft.drawLine(MARGIN, line_pos[0],  TFT_WIDTH-MARGIN, line_pos[0], TFT_WHITE);
     tft.drawLine(MARGIN, line_pos[3],  TFT_WIDTH-MARGIN, line_pos[3], TFT_WHITE);
     
-
-    Beer beer;
     
     // labels are positioned above the lines
     tft.setTextDatum(BL_DATUM);
@@ -209,7 +272,7 @@ void drawFlowScreen(void) {
     tft.drawString("Total Vol: " + flow_rate, MARGIN, line_pos[1] + sp_bot + 20);
     tft.drawString("Duration : " + flow_rate, MARGIN, line_pos[1] + sp_bot + 40);
 
-    writeStatusBar((String(ESP.getChipId()) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
+    writeStatusBar((String(ESP.getChipId(), HEX) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
 }
 
 void drawBeerScreen(void) {
@@ -221,7 +284,6 @@ void drawBeerScreen(void) {
         tft.drawLine(MARGIN, line_pos[i],  TFT_WIDTH-MARGIN, line_pos[i], TFT_WHITE);
     }
 
-    Beer beer;
     // stats are positioned below the lines
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BEER);
@@ -261,7 +323,7 @@ void drawBeerScreen(void) {
     tft.drawString("glass.png", 240 - MARGIN - glass_w/2, line_pos[2] + sp_bot + glass_h/2, LBL_FONT);
 
     //writeStatusBar("Last pour : 230ml", TFT_YELLOW);
-    writeStatusBar((String(ESP.getChipId()) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
+    writeStatusBar((String(ESP.getChipId(), HEX) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
 }
 
 void drawFillMeter(bool update_fill) {
@@ -362,9 +424,38 @@ void initScreen(void) {
 
 void writeStatusBar(const char * status, uint16_t text_color)
 {
+
     tft.setTextDatum(BC_DATUM);
     tft.setFreeFont(FONT_STATUS);
     tft.setTextColor(text_color);
     tft.fillRect(0, 300, 240, 20, TFT_BLACK);
-    tft.drawString(status, 120, 318);
+    if (millis() < 60000) {
+        tft.drawString(status, 120, 318);
+    }
+}
+
+
+
+// MQTT stuff
+void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
+{
+    Serial.println("MQTT Callback");
+    String lookup = String("fugi/taps/lookup/") + String(ESP.getChipId());
+    Serial.println(lookup);
+    Serial.println(p_topic);
+
+    String payload;
+    uint8_t i;
+
+    for (i = 0; i < p_length; i++)
+    {
+        payload.concat((char)p_payload[i]);
+    }
+
+
+    if (lookup.equals(p_topic)) {
+        uint8_t tap = atoi((char*)p_payload);
+        beer.set_tap(tap);
+    }
+    return;
 }

@@ -1,9 +1,23 @@
 #include "Beer.h"
 #include <ESP8266WiFi.h>
 
+void Beer::init() {
+    _tap_no = -1;
+}
+
+void Beer::set_tap(int8_t tap_no) {
+    Serial.println("Setting tap number " + String(tap_no) );
+    _tap_no = tap_no;
+}
+
+
 uint8_t Beer::tap(void) {
-    uint8_t index = (WiFi.localIP()[3] % 10) - 1;
-    return min(index, (uint8_t) 6);
+    if (_tap_no == -1) {
+        uint8_t index = (WiFi.localIP()[3] % 10);
+        return min(index, (uint8_t) 7);
+    } else {
+        return _tap_no;
+    }
 }
 
 String Beer::name(void) {
@@ -17,13 +31,14 @@ String Beer::name(void) {
         "Not defined"
     };
 
-    return beers[this->tap()];
+    Serial.println("Getting beer number " + String(this->tap() - 1));
+    return beers[this->tap() - 1];
 }
 
 String Beer::type(void)
 {
     String types[] = {
-        "Am. Pale Ale", 
+        "Am. Pale Ale",
         "New England IPA",
         "American IPA",
         "Milk Stout",
@@ -32,7 +47,7 @@ String Beer::type(void)
         "Derp"
     };
 
-    return types[this->tap()];
+    return types[this->tap() - 1];
 }
 
 String Beer::abv(void)
@@ -46,8 +61,8 @@ String Beer::abv(void)
         "5.0%",
         "N/A%",
     };
-    
-    return abvs[this->tap()];
+
+    return abvs[this->tap() - 1];
 }
 
 String Beer::ibu(void)
@@ -62,7 +77,7 @@ String Beer::ibu(void)
         "NA",
     };
 
-    return ibus[this->tap()];
+    return ibus[this->tap() - 1];
 }
 
 String Beer::og(void)
@@ -77,5 +92,5 @@ String Beer::og(void)
         "NA",
     };
 
-    return ogs[this->tap()];
+    return ogs[this->tap() - 1];
 }

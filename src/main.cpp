@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <ESP.h>
+// #include <ESP.h>
 
 // Display driver
 #include <SPI.h>
@@ -254,8 +254,8 @@ void drawFlowScreen(void) {
     // draw divider lines first
     tft.drawLine(MARGIN, line_pos[0],  TFT_WIDTH-MARGIN, line_pos[0], TFT_WHITE);
     tft.drawLine(MARGIN, line_pos[3],  TFT_WIDTH-MARGIN, line_pos[3], TFT_WHITE);
-    
-    
+
+
     // labels are positioned above the lines
     tft.setTextDatum(BL_DATUM);
     tft.setFreeFont(FONT_LABELS);
@@ -290,7 +290,7 @@ void drawBeerScreen(void) {
     tft.setTextWrap(true);
     tft.drawString(beer.name(), MARGIN, line_pos[0] + sp_bot);
 
-    
+
     // labels are positioned above the lines
     tft.setTextDatum(BL_DATUM);
     tft.setFreeFont(FONT_LABELS);
@@ -298,7 +298,7 @@ void drawBeerScreen(void) {
     tft.drawString("STYLE", MARGIN, line_pos[1] - sp_top);
     tft.drawString("STATS", MARGIN, line_pos[2] - sp_top);
     tft.drawString("FILL", MARGIN, line_pos[3] - sp_top);
-    
+
     // stats are positioned below the lines
     tft.setTextDatum(TL_DATUM);
     tft.setFreeFont(FONT_BEER);
@@ -348,9 +348,9 @@ void drawFillMeter(bool update_fill) {
     }
 
     tft.fillRect(240-95, line_pos[3] + sp_bot, 240, 20, TFT_BLACK);
-    ui.drawProgressBar(MARGIN, line_pos[3] + sp_bot, 240-100, 20, fill_percent, 
+    ui.drawProgressBar(MARGIN, line_pos[3] + sp_bot, 240-100, 20, fill_percent,
         TFT_WHITE, fill_color);
-    
+
     tft.setTextDatum(TR_DATUM);
     tft.setFreeFont(FONT_STATUS);
     tft.setTextColor(TFT_WHITE);

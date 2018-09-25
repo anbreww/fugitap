@@ -7,7 +7,7 @@
 // TODO : provide "reset" method to clear pour count
 
 #define MAX_TAPS   7    // 6 real taps and #7 for debugging
-#define POUR_TIMEOUT    2500
+#define POUR_TIMEOUT    1800
 #define MIN_FLOW_RATE   0.1 // minimum flow to count as pouring
 
 Beer::Beer(FlowMeter& meter) : _flow_meter(meter) {

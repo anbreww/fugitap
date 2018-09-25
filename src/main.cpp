@@ -191,7 +191,7 @@ void loop()
     }
 
     // update pour status live
-    if (millis() - lastFlowUpdate > 1100) {
+    if (millis() - lastFlowUpdate > 500) {
         lastFlowUpdate = millis();
         drawFlowRate();
     }
@@ -272,7 +272,6 @@ void drawFlowRate(void) {
     }
 
     pouring_callback(beer.is_pouring());
-
 }
 
 void drawFlowScreen(void) {
@@ -485,6 +484,7 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
     String lookup = String("fugi/taps/lookup/") + String(ESP.getChipId());
     Serial.println(lookup);
     Serial.println(p_topic);
+    static bool first_load = true;
 
     String payload;
     uint8_t i;
@@ -505,6 +505,20 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
         my_topic = "fugi/taps/" + String(tap);
         Serial.println("My topic : " + my_topic);
     }
+
+    String remaining = my_topic + "/remaining";
+    if (first_load && beer.tap() != -1 && remaining.equals(p_topic)) {
+        double vol = atof((char*)p_payload);
+        Serial.println("Loading volume (" + String(vol) + "l) from MQTT message");
+        beer.set_poured(beer.full_vol() - vol);
+        first_load = false;
+    }
+
+    String reset = my_topic + "/reset";
+    if (reset.equals(p_topic)) {
+        beer.set_poured(0);
+        pouring_callback(false);
+    }
     
     return;
 }
@@ -516,6 +530,10 @@ void pouring_callback(bool pouring)
         String status = pouring ? "true":"false";
         client.publish((my_topic+ "/pouring").c_str() , status.c_str());;
         last_pouring = pouring;
+        if (!pouring) {
+            // finished pouring : update to MQTT
+            client.publish((my_topic + "/remaining").c_str(), String(beer.volume()).c_str(), true);
+        }
     }
 }
 

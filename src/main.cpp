@@ -56,10 +56,14 @@ GfxUi ui = GfxUi(&tft);
 void initScreen(void);
 void drawBeerScreen(void);
 void drawFillMeter(bool update_fill);
-void writeStatusBar(const char *status, uint16_t text_color);
+void writeStatusBar(const char * status, uint16_t text_color);
+void writeStatusBar(const char * status, uint16_t text_color, bool force);
 void drawFlowRate(void);
 void drawFlowScreen(void);
 void MeterISR(void);    // flow meter ISR
+
+// MQTT stuff
+void hello(void);
 
 // define the sensor characteristics here
 const double cap = 20.0f;       // l/min
@@ -70,7 +74,12 @@ FlowSensorProperties MySensor = {cap, kf, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}};
 
 FlowMeter Meter = FlowMeter(PIN_FLOW_IN, MySensor);
 
-Beer beer;
+bool debug = false;
+
+Beer beer(Meter);
+
+String my_topic = "fugi/taps/XX";
+void pouring_callback(bool pouring);
 
 void setup() {
 #ifdef SERIAL_DEBUG
@@ -82,12 +91,12 @@ void setup() {
     ArduinoOTA.onStart([]() {
         digitalWrite(PIN_BACKLIGHT, HIGH);
         Serial.println("OTA Starting");
-        writeStatusBar("OTA UPDATE STARTING", TFT_ORANGE);
+        writeStatusBar("OTA UPDATE STARTING", TFT_ORANGE, true);
     });
 
     ArduinoOTA.onEnd([]() {
         Serial.println("Done! Rebooting");
-        writeStatusBar("DONE. REBOOTING!", TFT_ORANGE);
+        writeStatusBar("DONE. REBOOTING!", TFT_ORANGE, true);
     });
 
     SPIFFS.begin();
@@ -108,12 +117,6 @@ void setup() {
     Serial.println("Connecting to MQTT server");
     client.setServer(mqtt_server_host, mqtt_server_port);
     client.setCallback(mqtt_callback);
-
-    delay(1500);
-
-    beer.init();
-
-    Serial.println("setup() finished.");
 }
 
 void reconnect()
@@ -138,9 +141,7 @@ void reconnect()
             //client.subscribe(MQTT_TOPIC_LEDS);
             client.subscribe(MQTT_TOPIC_TAPS);
 
-            String conn_str = "FugiTAPs ESP-" + String(ESP.getChipId(), HEX)
-               + " is online at " + WiFi.localIP().toString();
-            client.publish("fugi/leds/status", conn_str.c_str(), true);
+            hello();
             break;
         }
         else
@@ -154,11 +155,20 @@ void reconnect()
     }
 }
 
+uint32_t update_frequency(void)
+{
+    if (millis() < 300000) {
+        return 30 * 1000;   // 30 seconds
+    } else {
+        return 60 * 60 * 1000;  // 1 hour
+    }
+}
 
 void loop()
 {
     static int32_t lastScreenUpdate = -1;
     static int32_t lastFillUpdate = -1;
+    static int32_t lastFlowUpdate = -1;
     ArduinoOTA.handle();
     client.loop();
     //pinMode(PIN_FLOW_IN, INPUT);
@@ -171,17 +181,25 @@ void loop()
     //     return;
     // }
 
-    // only update beer status screen every 30 seconds
-    if (millis() - lastScreenUpdate > 30000 || lastScreenUpdate == -1) {
+    // update beer screen every 30 seconds for 5 minutes, then every hour
+    if (millis() - lastScreenUpdate > update_frequency() || lastScreenUpdate == -1 ||
+        beer.last_updated() > lastScreenUpdate) {
+        // TODO : update beer screen on change of beer
         drawBeerScreen();
         drawFillMeter(false);
         lastScreenUpdate = millis();
     }
 
     // update pour status live
-    if (millis() - lastFillUpdate > 1500 || lastFillUpdate == -1 ) {
+    if (millis() - lastFlowUpdate > 1100) {
+        lastFlowUpdate = millis();
+        drawFlowRate();
+    }
+
+    if (millis() - lastFillUpdate > 2500 || lastFillUpdate == -1 ) {
         drawFillMeter(true);
         lastFillUpdate = millis();
+        lastFlowUpdate = millis();
         drawFlowRate();
     }
 
@@ -209,23 +227,37 @@ void MeterISR(void) {
 
 void drawFlowRate(void) {
     const uint8_t line_h = line_pos[0] - sp_top;
-    const uint8_t text_w = 75;
+    const uint8_t text_w = 85;
 
-    Meter.tick(); // process ticks
+    static uint32_t last_update = millis()-1000;
+    uint32_t now = millis();
 
-    String flow_rate = String(Meter.getCurrentFlowrate());
+    if (now - last_update < 250) {
+        return;
+    }
+
+    //Serial.print("Duration = ");
+    //Serial.println(now - last_update);
+    Meter.tick(now - last_update); // process ticks
+    last_update = now;
+
+    double flow_rate = Meter.getCurrentFlowrate();
+
+    String flow_rate_str = String(Meter.getCurrentFlowrate());
     String total_vol = String(Meter.getTotalVolume());
+    //Serial.print("Vols : ");
+    //Serial.print(Meter.getCurrentVolume());
+    //Serial.print(" ");
+    //Serial.println(Meter.getTotalVolume());
     String duration = String(Meter.getTotalDuration()/1000);
 
     tft.setTextDatum(BL_DATUM);
     tft.setFreeFont(FONT_LABELS);
 
-    const bool debug = false;
-
     if (debug) {
         // beer line
         tft.fillRect(MARGIN+text_w, line_pos[0] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
-        tft.drawString(flow_rate + " l/min", MARGIN+text_w, line_pos[0] - sp_top);
+        tft.drawString("pouring: " + String(beer.is_pouring()), MARGIN+text_w, line_pos[0] - sp_top);
         // style line
         tft.fillRect(MARGIN+text_w, line_pos[1] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
         tft.drawString(total_vol + " l", MARGIN+text_w, line_pos[1] - sp_top);
@@ -235,7 +267,11 @@ void drawFlowRate(void) {
     }
     // fill line
     tft.fillRect(MARGIN+text_w, line_pos[3] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
-    tft.drawString(flow_rate + " l/min", MARGIN+text_w, line_pos[3] - sp_top);
+    if (beer.is_pouring()) {
+        tft.drawString(flow_rate_str + " l/min", MARGIN+text_w, line_pos[3] - sp_top);
+    }
+
+    pouring_callback(beer.is_pouring());
 
 }
 
@@ -328,9 +364,11 @@ void drawBeerScreen(void) {
 
 void drawFillMeter(bool update_fill) {
     // draw fill meter, capacity remaining and flow rate below
-    double litres = (19.00 - Meter.getTotalVolume());
+    double litres = (beer.volume());
 
-    int8_t fill_percent = (uint8_t) litres * 100 / 19;
+    //Serial.println("Litres: " + String(beer.volume()) + " full : " + String(beer.full_vol()));
+
+    int8_t fill_percent = (uint8_t) litres * 100 / beer.full_vol();
     if (fill_percent > 100) {
         fill_percent = 100;
     }
@@ -390,6 +428,10 @@ void initScreen(void) {
 
     Serial.println("\nConnecting to WiFi");
 
+    if(ESP.getChipId() == 15951948) {
+        debug = true;
+    }
+
 
     // paint the UI while we wait for the wifi
     drawBeerScreen();
@@ -414,22 +456,22 @@ void initScreen(void) {
     //pinMode(FLOW_IN_PIN, INPUT);
 
     writeStatusBar("Connected Successfully", TFT_WHITE);
-    delay(1500);
-    //tft.fillRect
-    char ip_status[30] = "IP: ";
-    strcat(ip_status, WiFi.localIP().toString().c_str());
-    writeStatusBar(ip_status, TFT_WHITE);
-    delay(2500);
+    delay(500);
 }
 
 void writeStatusBar(const char * status, uint16_t text_color)
+{
+    writeStatusBar(status, text_color, false);
+}
+
+void writeStatusBar(const char * status, uint16_t text_color, bool force)
 {
 
     tft.setTextDatum(BC_DATUM);
     tft.setFreeFont(FONT_STATUS);
     tft.setTextColor(text_color);
     tft.fillRect(0, 300, 240, 20, TFT_BLACK);
-    if (millis() < 60000) {
+    if (millis() < 60000 || force) {
         tft.drawString(status, 120, 318);
     }
 }
@@ -454,8 +496,32 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
 
 
     if (lookup.equals(p_topic)) {
+        // todo : unsubscribe from old tap number
         uint8_t tap = atoi((char*)p_payload);
+
+        String status_str = String(ESP.getChipId(), HEX) + " set tap to " + String(tap);
+        client.publish("fugi/taps/setting", status_str.c_str());
         beer.set_tap(tap);
+        my_topic = "fugi/taps/" + String(tap);
+        Serial.println("My topic : " + my_topic);
     }
+    
     return;
+}
+
+void pouring_callback(bool pouring)
+{
+    static bool last_pouring = false;
+    if (pouring != last_pouring) {
+        String status = pouring ? "true":"false";
+        client.publish((my_topic+ "/pouring").c_str() , status.c_str());;
+        last_pouring = pouring;
+    }
+}
+
+void hello(void)
+{
+    String conn_str = "FugiTaps ESP-" + String(ESP.getChipId(), HEX)
+                    + " is online at " + WiFi.localIP().toString();
+    client.publish("fugi/taps/hello", conn_str.c_str(), true);
 }

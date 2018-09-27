@@ -8,6 +8,8 @@ class Beer {
         void    set_tap(int8_t tap_no);
         void    set_full_vol(double);
         void    set_poured(double);
+        void    set_img(String new_img);
+        void    refresh(void);
         String  name(void),
                 type(void),
                 abv(void),
@@ -27,7 +29,8 @@ class Beer {
                 _untappd_url,
                 _glass_url,
                 _abv,
-                _ibu;
+                _ibu,
+                _glass_img;
         double  _full_vol,
                 _poured;
         uint32_t _last_updated;

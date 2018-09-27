@@ -4,7 +4,9 @@
 // Display driver
 #include <SPI.h>
 #include <TFT_eSPI.h>
+#define FS_NO_GLOBALS // Avoid conflict with SD library File type definition
 #include <FS.h>
+#include "WebResource.h"
 
 // Download manager, OTA updates etc
 #include <ESP8266WiFi.h>
@@ -19,6 +21,7 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length);
 
 // TODO later : setup WiFi manager
 // #include <WiFiManager.h>
+
 
 // Flow meter input
 #include <FlowMeter.h>
@@ -48,10 +51,11 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length);
 WiFiClient wifiClient;
 PubSubClient client(wifiClient);
 
-
 // TFT Library : check User_Setup.h in the library for your hardware settings!
 TFT_eSPI tft = TFT_eSPI();
 GfxUi ui = GfxUi(&tft);
+
+WebResource webResource;
 
 void initScreen(void);
 void drawBeerScreen(void);
@@ -80,6 +84,10 @@ Beer beer(Meter);
 
 String my_topic = "fugi/taps/XX";
 void pouring_callback(bool pouring);
+void redownload(String img_name);
+
+void downloadCallback(String filename, int16_t bytesDownloaded, int16_t bytesTotal);
+ProgressCallback _downloadCallback = downloadCallback;
 
 void setup() {
 #ifdef SERIAL_DEBUG
@@ -103,8 +111,8 @@ void setup() {
 
 
     listFiles();
-    // Serial.println("Formatting SPIFFS, please wait.");
-    // SPIFFS.format();
+    Serial.println("Formatting SPIFFS, please wait.");
+    //SPIFFS.format();
 
     Serial.println("Initializing flow sensor");
 
@@ -256,14 +264,14 @@ void drawFlowRate(void) {
 
     if (debug) {
         // beer line
-        tft.fillRect(MARGIN+text_w, line_pos[0] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
-        tft.drawString("pouring: " + String(beer.is_pouring()), MARGIN+text_w, line_pos[0] - sp_top);
+        //tft.fillRect(MARGIN+text_w, line_pos[0] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
+        //tft.drawString("pouring: " + String(beer.is_pouring()), MARGIN+text_w, line_pos[0] - sp_top);
         // style line
-        tft.fillRect(MARGIN+text_w, line_pos[1] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
-        tft.drawString(total_vol + " l", MARGIN+text_w, line_pos[1] - sp_top);
+        //tft.fillRect(MARGIN+text_w, line_pos[1] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
+        //tft.drawString(total_vol + " l", MARGIN+text_w, line_pos[1] - sp_top);
         // stats line
-        tft.fillRect(MARGIN+text_w, line_pos[2] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
-        tft.drawString(duration + " s.", MARGIN+text_w, line_pos[2] - sp_top);
+        //tft.fillRect(MARGIN+text_w, line_pos[2] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
+        //tft.drawString(duration + " s.", MARGIN+text_w, line_pos[2] - sp_top);
     }
     // fill line
     tft.fillRect(MARGIN+text_w, line_pos[3] - sp_top - 23, 240-2*MARGIN-text_w, line_pos[0] - sp_top, TFT_BLACK);
@@ -313,10 +321,18 @@ void drawFlowScreen(void) {
 void drawBeerScreen(void) {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    const uint8_t glass_w = 70;
+    const uint8_t glass_h = 80;
+    uint16_t end_pos;
 
     // draw divider lines first
     for (uint8_t i = 0; i < NUM_LINES; i++) {
-        tft.drawLine(MARGIN, line_pos[i],  TFT_WIDTH-MARGIN, line_pos[i], TFT_WHITE);
+        if (i == 2) {
+            end_pos = TFT_WIDTH-MARGIN-glass_w;
+        } else {
+            end_pos = TFT_WIDTH-MARGIN;
+        }
+        tft.drawLine(MARGIN, line_pos[i], end_pos, line_pos[i], TFT_WHITE);
     }
 
     // stats are positioned below the lines
@@ -351,11 +367,19 @@ void drawBeerScreen(void) {
     tft.drawString("OG : " + beer.og(), MARGIN, line_pos[2] + sp_bot + 40);
 
     // Placeholder for glass which will be BMP / JPEG / PNG
-    const uint8_t glass_w = 70;
-    const uint8_t glass_h = 60;
-    tft.drawRect(240 - MARGIN - glass_w, line_pos[2] + sp_bot, glass_w, glass_h, TFT_WHITE);
-    tft.setTextDatum(MC_DATUM);
-    tft.drawString("glass.png", 240 - MARGIN - glass_w/2, line_pos[2] + sp_bot + glass_h/2, LBL_FONT);
+    if (WiFi.isConnected()) {
+        String dl_url = String("http://anbrew.ch") + beer.glass_img();
+        webResource.downloadFile(dl_url, beer.glass_img(), _downloadCallback);
+    }
+
+    if (SPIFFS.exists(beer.glass_img()) == true) {
+        ui.drawBmp(beer.glass_img(), 240 - MARGIN - glass_w, line_pos[2] - 15);
+    } else {
+        //tft.drawRect(240 - MARGIN - glass_w, line_pos[2] + sp_bot, glass_w, glass_h, TFT_WHITE);
+        tft.drawRect(240 - MARGIN - glass_w, line_pos[2] - 15, glass_w, glass_h, TFT_WHITE);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("glass.png", 240 - MARGIN - glass_w/2, line_pos[2] + sp_bot + glass_h/2, LBL_FONT);
+    }
 
     //writeStatusBar("Last pour : 230ml", TFT_YELLOW);
     writeStatusBar((String(ESP.getChipId(), HEX) + "  " + WiFi.localIP().toString()).c_str(), TFT_YELLOW);
@@ -519,7 +543,17 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
         beer.set_poured(0);
         pouring_callback(false);
     }
-    
+
+    String download = my_topic + "/download";
+    if (download.equals(p_topic)) {
+        redownload("/" + payload);
+    }
+
+    String set_img = my_topic + "/set_img";
+    if (set_img.equals(p_topic)) {
+        beer.set_img(payload);
+    }
+
     return;
 }
 
@@ -537,9 +571,28 @@ void pouring_callback(bool pouring)
     }
 }
 
+void redownload(String img_name) 
+{
+    if (SPIFFS.exists(img_name)) {
+        Serial.println("Removing file from filesystem" + img_name);
+        SPIFFS.remove(img_name);
+    }
+
+    String dl_url = String("http://anbrew.ch") + img_name;
+    Serial.println("Downloading file " + dl_url);
+    webResource.downloadFile(dl_url, img_name, _downloadCallback);
+    beer.refresh();
+}
+
 void hello(void)
 {
     String conn_str = "FugiTaps ESP-" + String(ESP.getChipId(), HEX)
                     + " is online at " + WiFi.localIP().toString();
     client.publish("fugi/taps/hello", conn_str.c_str(), true);
+}
+
+void downloadCallback(String filename, int16_t bytesDownloaded, int16_t bytesTotal)
+{
+    Serial.println("Downloading " + filename + " " + String(bytesDownloaded) + "/" + String(bytesTotal));
+    ESP.wdtFeed();
 }

@@ -10,6 +10,8 @@
 #define POUR_TIMEOUT    1800
 #define MIN_FLOW_RATE   0.1 // minimum flow to count as pouring
 
+const char * glasses_url = "http://anbrew.ch";
+
 Beer::Beer(FlowMeter& meter) : _flow_meter(meter) {
     _tap_no = -1;
     _full_vol = 19.00;
@@ -72,12 +74,24 @@ void Beer::loadSamples(void) {
         "NA",
     };
 
+    String glass_imgs[] = {
+        "/glass02.bmp",
+        "/glass02.bmp",
+        "/glass03.bmp",
+        "/glass01.bmp",
+        "/glass02.bmp",
+        "/glass01.bmp",
+        "/glass02.bmp",
+        "/glass02.bmp",
+    };
+
     _name = beers[this->tap()-1];
     _style = types[this->tap()-1];
     _abv = abvs[this->tap()-1];
     _ibu = ibus[this->tap()-1];
     _og = ogs[this->tap()-1];
     _full_vol = 19.0;
+    _glass_img = glass_imgs[this->tap()-1];
 
     _last_updated = millis();
 }
@@ -159,7 +173,18 @@ bool Beer::is_pouring(void)
     }
 }
 
+void Beer::set_img(String new_img)
+{
+    _glass_img = "/" + new_img;
+    _last_updated = millis();
+}
+
 String Beer::glass_img(void)
 {
-    return "/glass.png";
+    return _glass_img;
+}
+
+void Beer::refresh(void)
+{
+    _last_updated = millis();
 }

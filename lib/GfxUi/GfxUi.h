@@ -30,7 +30,7 @@ https://github.com/Bodmer/TFT_eSPI
 #include <FS.h>
 
 // JPEG decoder library
-//#include <JPEGDecoder.h>
+#include <JPEGDecoder.h>
 
 #ifndef _GFX_UI_H
 #define _GFX_UI_H
@@ -43,11 +43,11 @@ https://github.com/Bodmer/TFT_eSPI
 class GfxUi {
   public:
     GfxUi(TFT_eSPI * tft);
-    //void drawBmp(String filename, uint8_t x, uint16_t y);
+    void drawBmp(String filename, uint8_t x, uint16_t y);
     void drawProgressBar(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t percentage, uint16_t frameColor, uint16_t barColor);
-    //void jpegInfo();
-    //void drawJpeg(const char *filename, int xpos, int ypos);
-    //void jpegRender(int xpos, int ypos);
+    void jpegInfo();
+    void drawJpeg(const char *filename, int xpos, int ypos);
+    void jpegRender(int xpos, int ypos);
     
   private:
     TFT_eSPI * _tft;
@@ -57,4 +57,3 @@ class GfxUi {
 };
 
 #endif
-

@@ -20,12 +20,12 @@ Beer::Beer(FlowMeter& meter) : _flow_meter(meter) {
 
 void Beer::loadSamples(void) {
     String beers[] = {
-        "Armadillo P.A",
+        "Gaellaxy P.A",
         "Milkshake IPA",
-        "Smollusque IPA",
-        "Legen-dairy",
-        "She May Rouge",
-        "Smoked Porter",
+        "Ardennes IPA",
+        "Armadillo P.A",
+        "Oatless Stout",
+        "AnBrew Porter",
         "Debugging",
         "Not defined"
     };
@@ -33,9 +33,9 @@ void Beer::loadSamples(void) {
     String types[] = {
         "Am. Pale Ale",
         "New England IPA",
-        "American IPA",
-        "Milk Stout",
-        "Belgian Abbey",
+        "Belgian IPA",
+        "Am. Pale Ale",
+        "Stout",
         "Porter",
         "Testing",
         "Uninitialized"
@@ -44,32 +44,32 @@ void Beer::loadSamples(void) {
     String abvs[] = {
         "4.5%",
         "5.3%",
-        "7.2%",
-        "4.5%",
-        "8.3%",
+        "6.8%",
         "5.0%",
+        "5.5%",
+        "5.5%",
         "6.6%",
         "N/A%",
     };
 
     String ibus[] = {
-        "20",
-        "10",
-        "99",
-        "25",
-        "20",
-        "20",
+        "40",
+        "45",
+        "55",
+        "45",
+        "55",
+        "50",
         "66",
         "NA",
     };
 
     String ogs[] = {
         "1.045",
-        "1.054",
-        "1.064",
-        "1.066",
+        "1.055",
+        "1.078",
+        "1.063",
         "1.070",
-        "1.051",
+        "1.060",
         "1.666",
         "NA",
     };
@@ -77,12 +77,12 @@ void Beer::loadSamples(void) {
     String glass_imgs[] = {
         "/glass02.bmp",
         "/glass02.bmp",
-        "/glass03.bmp",
-        "/glass01.bmp",
+        "/glass02.bmp",
+        "/glass02.bmp",
         "/glass02.bmp",
         "/glass01.bmp",
         "/glass02.bmp",
-        "/glass02.bmp",
+        "/glass01.bmp",
     };
 
     _name = beers[this->tap()-1];
@@ -155,7 +155,8 @@ double Beer::full_vol(void)
 
 double Beer::volume(void)
 {
-    return _full_vol - _flow_meter.getTotalVolume();
+    double vol = _full_vol - _flow_meter.getTotalVolume();
+    return (vol > -2.0) ? vol : -2.0; 
 }
 
 bool Beer::is_pouring(void)

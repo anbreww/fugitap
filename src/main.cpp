@@ -82,17 +82,21 @@ bool debug = false;
 
 Beer beer(Meter);
 
-String my_topic = "fugi/taps/XX";
+String my_topic = "fugi/tap/XX";
 void pouring_callback(bool pouring);
 void redownload(String img_name);
 
 void downloadCallback(String filename, int16_t bytesDownloaded, int16_t bytesTotal);
 ProgressCallback _downloadCallback = downloadCallback;
 
+rst_info * reset_info;
+
 void setup() {
 #ifdef SERIAL_DEBUG
     Serial.begin(UART_BAUD);
 #endif
+
+    reset_info = ESP.getResetInfoPtr();
 
     initScreen();
 
@@ -111,8 +115,11 @@ void setup() {
 
 
     listFiles();
+
+    // Re-enable these lines to empty the built-in file storage.
     Serial.println("Formatting SPIFFS, please wait.");
-    //SPIFFS.format();
+    SPIFFS.format();
+    listFiles();
 
     Serial.println("Initializing flow sensor");
 
@@ -148,6 +155,7 @@ void reconnect()
             // ... and resubscribe
             //client.subscribe(MQTT_TOPIC_LEDS);
             client.subscribe(MQTT_TOPIC_TAPS);
+            client.subscribe(MQTT_TOPIC_TAP);
 
             hello();
             break;
@@ -368,7 +376,7 @@ void drawBeerScreen(void) {
 
     // Placeholder for glass which will be BMP / JPEG / PNG
     if (WiFi.isConnected()) {
-        String dl_url = String("http://anbrew.ch") + beer.glass_img();
+        String dl_url = String("http://elementary.ch") + beer.glass_img();
         webResource.downloadFile(dl_url, beer.glass_img(), _downloadCallback);
     }
 
@@ -451,7 +459,7 @@ void initScreen(void) {
 
     Serial.println("\nConnecting to WiFi");
 
-    if(ESP.getChipId() == 15951948) {
+    if(ESP.getChipId() == 15951948 || ESP.getChipId() == 11904305) {
         debug = true;
     }
 
@@ -505,7 +513,11 @@ void writeStatusBar(const char * status, uint16_t text_color, bool force)
 void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
 {
     Serial.println("MQTT Callback");
-    String lookup = String("fugi/taps/lookup/") + String(ESP.getChipId());
+    #ifdef DEBUG
+    String lookup = String("fugidev/tap/lookup/") + String(ESP.getChipId(), HEX);
+    #else
+    String lookup = String("fugi/taps/lookup/") + String(ESP.getChipId(), HEX);
+    #endif
     Serial.println(lookup);
     Serial.println(p_topic);
     static bool first_load = true;
@@ -522,12 +534,25 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
     if (lookup.equals(p_topic)) {
         // todo : unsubscribe from old tap number
         uint8_t tap = atoi((char*)p_payload);
-
-        String status_str = String(ESP.getChipId(), HEX) + " set tap to " + String(tap);
-        client.publish("fugi/taps/setting", status_str.c_str());
-        beer.set_tap(tap);
-        my_topic = "fugi/taps/" + String(tap);
+        my_topic = "fugi/tap/" + String(tap);
         Serial.println("My topic : " + my_topic);
+
+        String reset_reasons[] = {
+            "DEFAULT_RST : normal power on",
+            "WDT_RST : hardware watchdog reset",
+            "EXCEPTION_RST: exception reset",
+            "SOFT_WDT_RST: software watch dog reset",
+            "SOFT_RESTART: software restart, system_restart",
+            "DEEP_SLEEP_AWAKE: wake up from deep sleep",
+            "EXT_SYS_RST: external system reset"
+        };
+        String reset_str = "ESP-" + String(ESP.getChipId(), HEX);
+        reset_str += " Reset reason=" + String(reset_info->reason);
+        reset_str += " (" + reset_reasons[reset_info->reason] + ")";
+
+        client.publish((my_topic + "/reset").c_str(), reset_str.c_str());
+
+        beer.set_tap(tap);
     }
 
     String remaining = my_topic + "/remaining";
@@ -538,8 +563,9 @@ void mqtt_callback(char *p_topic, byte *p_payload, unsigned int p_length)
         first_load = false;
     }
 
-    String reset = my_topic + "/reset";
+    String reset = my_topic + "/refill";
     if (reset.equals(p_topic)) {
+        // TODO : force update of /remaining
         beer.set_poured(0);
         pouring_callback(false);
     }
@@ -588,7 +614,7 @@ void hello(void)
 {
     String conn_str = "FugiTaps ESP-" + String(ESP.getChipId(), HEX)
                     + " is online at " + WiFi.localIP().toString();
-    client.publish("fugi/taps/hello", conn_str.c_str(), true);
+    client.publish("fugi/tap/hello", conn_str.c_str(), true);
 }
 
 void downloadCallback(String filename, int16_t bytesDownloaded, int16_t bytesTotal)

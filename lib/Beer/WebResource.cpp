@@ -43,6 +43,7 @@ void WebResource::downloadFile(String url, String filename, ProgressCallback pro
         Serial.print("[HTTP] begin...\n");
 
         // configure server and url
+        // const char* fingerprint = "E7 F2 AF 42 E0 00 77 8E C3 9C 6C 57 A5 88 15 95 D5 BA 81 67";
         http.begin(url);
 
         Serial.print("[HTTP] GET...\n");
